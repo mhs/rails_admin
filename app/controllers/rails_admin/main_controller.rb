@@ -147,6 +147,12 @@ module RailsAdmin
       @authorization_adapter.authorize(:destroy, @abstract_model, @object) if @authorization_adapter
 
       @object = @object.destroy
+
+      if @object == false
+        flash[:notice] = t("admin.delete.error", :name => @model_config.label)
+        redirect_to rails_admin_list_path(:model_name => @abstract_model.to_param)
+      end
+
       flash[:notice] = t("admin.delete.flash_confirmation", :name => @model_config.label)
 
       AbstractHistory.create_history_item("Destroyed #{@model_config.with(:object => @object).object_label}", @object, @abstract_model, _current_user)

@@ -49,6 +49,7 @@ en:
     delete:
       flash_confirmation: "%{name} was successfully destroyed"
       confirmation: "Yes, I'm sure"
+      error: "%{name} could not be destroyed"
     flash:
       successful: "%{name} was successfully %{action}"
       error: "%{name} failed to be %{action}"
