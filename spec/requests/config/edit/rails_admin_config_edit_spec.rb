@@ -3,7 +3,7 @@ require 'spec_helper'
 describe "RailsAdmin Config DSL Edit Section" do
 
   describe "field groupings" do
-
+    
     it "should be hideable" do
       RailsAdmin.config Team do
         edit do
@@ -57,7 +57,57 @@ describe "RailsAdmin Config DSL Edit Section" do
 
       response.should have_tag("legend", :content => "Renamed group")
     end
-
+    
+    describe "help" do
+    
+      it "should show help section if present" do
+        RailsAdmin.config Team do
+          edit do
+            group :default do
+              help "help paragraph to display"
+            end
+          end
+        end
+        get rails_admin_new_path(:model_name => "team")
+      
+        response.should have_tag('div.help', :content => "help paragraph to display")    
+      end
+    
+      it "should not show help if not present" do
+        RailsAdmin.config Team do
+          edit do
+            group :default do
+              label 'no help'
+            end
+          end
+        end
+        get rails_admin_new_path(:model_name => "team")
+      
+        response.should_not have_tag('div.help')    
+      end
+      
+      it "should be able to display multiple help if there are multiple sections" do
+        RailsAdmin.config Team do
+          edit do
+            group :default do
+              field :name
+              help 'help for default'           
+            end
+            group :other_section do
+              label "Other Section"
+              field :division_id
+              help 'help for other section'                         
+            end
+          end
+        end
+        get rails_admin_new_path(:model_name => "team")
+        response.should have_tag("div.help", :content => 'help for default')
+        response.should have_tag("div.help", :content => 'help for other section')        
+        response.should have_tag("div.help", :count => 2)
+      end  
+      
+    end
+    
     it "should have accessor for its fields" do
       RailsAdmin.config Team do
         edit do
@@ -363,7 +413,7 @@ describe "RailsAdmin Config DSL Edit Section" do
     end
 
     describe "a datetime field" do
-
+      
       it "should default to %B %d, %Y %H:%M" do
         get rails_admin_new_path(:model_name => "field_test")
 
@@ -465,6 +515,27 @@ describe "RailsAdmin Config DSL Edit Section" do
         @record.timestamp_field.should eql(::DateTime.parse(@time.to_s))
       end
     end
+    
+    describe " a field with 'format' as a name (Kernel function)" do
+      it "should be updatable without any error" do
+      
+        RailsAdmin.config FieldTest do
+          edit do
+            field :format
+          end
+        end
+
+        get rails_admin_new_path(:model_name => "field_test")
+        
+        fill_in "field_test[format]", :with => "test for format"
+        click_button "Save"
+
+        @record = RailsAdmin::AbstractModel.new("FieldTest").first
+
+        @record.format.should eql("test for format")
+      end
+    end
+
 
     describe "a time field" do
 
@@ -579,7 +650,8 @@ describe "RailsAdmin Config DSL Edit Section" do
       field.required?.should be false
     end
   end
-
+  
+  
   describe "CKEditor Support" do
     it "should start with CKEditor disabled" do
        field = RailsAdmin::config("Draft").edit.fields.find{|f| f.name == :notes}
@@ -615,7 +687,7 @@ describe "RailsAdmin Config DSL Edit Section" do
   end
   
   describe "Enum field support" do
-    it "should show input with class enum" do
+    it "should auto-detect enumeration when object responds to '\#{method}_enum'" do
       class Team
         def color_enum
           ["blue", "green", "red"]
@@ -629,11 +701,64 @@ describe "RailsAdmin Config DSL Edit Section" do
       end
       get rails_admin_new_path(:model_name => "team")
       response.should have_tag("select.enum")
+      response.should contain("green")
       
       #Reset
       Team.send(:remove_method, :color_enum)  
       RailsAdmin::Config.reset Team
     end
+    
+    it "should allow configuration of the enum method" do
+      class Team
+        def color_list
+          ["blue", "green", "red"]
+        end
+      end
+      
+      RailsAdmin.config Team do
+        edit do
+          field :color, :enum do
+            enum_method :color_list
+          end
+        end
+      end
+      get rails_admin_new_path(:model_name => "team")
+      response.should have_tag("select.enum")
+      response.should contain("green")
+      
+      #Reset
+      Team.send(:remove_method, :color_list)
+      RailsAdmin::Config.reset Team
+    end
+    
+    it "should allow direct listing of enumeration options and override enum method" do
+      class Team
+        def color_list
+          ["blue", "green", "red"]
+        end
+      end
+      
+      RailsAdmin.config Team do
+        edit do
+          field :color, :enum do
+            enum_method :color_list
+            enum do
+              ["yellow", "black"]
+            end
+          end
+        end
+      end
+      
+      get rails_admin_new_path(:model_name => "team")
+      response.should have_tag("select.enum")
+      response.should_not contain("green")
+      response.should contain("yellow")
+    
+      #Reset
+      Team.send(:remove_method, :color_list)
+      RailsAdmin::Config.reset Team
+    end
+
   end
   
   describe "ColorPicker Support" do
@@ -649,4 +774,155 @@ describe "RailsAdmin Config DSL Edit Section" do
       response.should have_tag("input.color")
     end
   end
+
+  describe "Form builder configuration" do
+
+    it "should allow override of default" do
+      RailsAdmin.config do |config|
+        config.model Player do
+          edit do
+            field :name
+          end
+        end
+        config.model Team do
+          edit do
+            form_builder :form_for_edit
+            field :name
+          end
+        end
+        config.model Fan do
+          create do
+            form_builder :form_for_create
+            field :name
+          end
+          update do
+            form_builder :form_for_update
+            field :name
+          end
+        end
+        config.model League do
+          create do
+            form_builder :form_for_league_create
+            field :name
+          end
+          update do
+            field :name
+          end
+        end
+      end
+
+      RailsAdmin::Config.model(Player).create.form_builder.should be(:form_for)
+      RailsAdmin::Config.model(Player).update.form_builder.should be(:form_for)
+      RailsAdmin::Config.model(Player).edit.form_builder.should be(:form_for)
+
+      RailsAdmin::Config.model(Team).update.form_builder.should be(:form_for_edit)
+      RailsAdmin::Config.model(Team).create.form_builder.should be(:form_for_edit)
+      RailsAdmin::Config.model(Team).edit.form_builder.should be(:form_for_edit)
+
+      RailsAdmin::Config.model(Fan).create.form_builder.should be(:form_for_create)
+      RailsAdmin::Config.model(Fan).update.form_builder.should be(:form_for_update)
+      RailsAdmin::Config.model(Fan).edit.form_builder.should be(:form_for_update) # not sure we care
+
+      RailsAdmin::Config.model(League).create.form_builder.should be(:form_for_league_create)
+      RailsAdmin::Config.model(League).update.form_builder.should be(:form_for)
+      RailsAdmin::Config.model(League).edit.form_builder.should be(:form_for) # not sure we care
+
+      # don't spill over into other views
+      expect {
+        RailsAdmin::Config.model(Team).list.form_builder
+      }.to raise_error(NoMethodError,/undefined method/)
+    end
+
+    it "should be used in the new and edit views" do
+      TF_CREATE_OUTPUT = "MY TEST FORM CREATE TEXT FIELD"
+      TF_UPDATE_OUTPUT = "MY TEST FORM UPDATE TEXT FIELD"
+
+      module MyCreateForm
+        class Builder < ::ActionView::Helpers::FormBuilder
+          def text_field(*args)
+            TF_CREATE_OUTPUT
+          end
+        end
+
+        module ViewHelper
+          def create_form_for(*args, &block)
+            options = args.extract_options!.reverse_merge(:builder => MyCreateForm::Builder)
+            form_for(*(args << options), &block)
+          end
+        end
+      end
+
+      module MyUpdateForm
+        class Builder < ::ActionView::Helpers::FormBuilder
+          def text_field(*args)
+            TF_UPDATE_OUTPUT
+          end
+        end
+
+        module ViewHelper
+          def update_form_for(*args, &block)
+            options = args.extract_options!.reverse_merge(:builder => MyUpdateForm::Builder)
+            form_for(*(args << options), &block)
+          end
+        end
+      end
+
+      class ActionView::Base
+        include MyCreateForm::ViewHelper
+        include MyUpdateForm::ViewHelper
+      end
+
+      RailsAdmin.config do |config|
+        config.model Player do
+          edit do
+            field :name
+          end
+        end
+        config.model Team do
+          edit do
+            form_builder :create_form_for
+            field :name
+          end
+        end
+        config.model League do
+          create do
+            form_builder :create_form_for
+            field :name
+          end
+          update do
+            form_builder :update_form_for
+            field :name
+          end
+        end
+      end
+
+      get rails_admin_new_path(:model_name => "player")
+      response.should have_tag("input#player_name")
+      response.should_not contain(TF_CREATE_OUTPUT)
+      response.should_not contain(TF_UPDATE_OUTPUT)
+      @player = FactoryGirl.create :player
+      get rails_admin_edit_path(:model_name => "player", :id => @player.id)
+      response.should have_tag("input#player_name")
+      response.should_not contain(TF_CREATE_OUTPUT)
+      response.should_not contain(TF_UPDATE_OUTPUT)
+
+      get rails_admin_new_path(:model_name => "team")
+      response.should contain(TF_CREATE_OUTPUT)
+      response.should_not contain(TF_UPDATE_OUTPUT)
+      @team = FactoryGirl.create :team
+      get rails_admin_edit_path(:model_name => "team", :id => @team.id)
+      response.should contain(TF_CREATE_OUTPUT)
+      response.should_not contain(TF_UPDATE_OUTPUT)
+
+      get rails_admin_new_path(:model_name => "league")
+      response.should contain(TF_CREATE_OUTPUT)
+      response.should_not contain(TF_UPDATE_OUTPUT)
+      @league = FactoryGirl.create :league
+      get rails_admin_edit_path(:model_name => "league", :id => @league.id)
+      response.should_not contain(TF_CREATE_OUTPUT)
+      response.should contain(TF_UPDATE_OUTPUT)
+    end
+
+  end
+
 end

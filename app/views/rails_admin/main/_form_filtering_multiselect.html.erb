@@ -6,17 +6,17 @@
 
   if xhr
     collection = selected.map do |o|
-      [config.with(:object => o).object_label, o.id]
+      [o.send(config.object_label_method), o.id]
     end
   else
-    collection = field.associated_collection.sort_by {|a| selected_ids.index(a[1]) || selected_ids.size }
+    collection = field.associated_collection(@authorization_adapter).sort_by {|a| selected_ids.index(a[1]) || selected_ids.size }
   end
 %>
 
               <div class="field <%= field.dom_id %>">
                 <%= form.label field.method_name, field.label %>
                 <input type="hidden" name="<%= field.dom_name %>" value=""/>
-                <%= form.select field.method_name, collection, { :selected => selected_ids }, field.html_attributes %>
+                <%= form.select field.method_name, collection, { :selected => selected_ids, :object => @object }, field.html_attributes %>
                 <% if field.has_errors? %>
                   <span class="errorMessage"><%= "#{field.label} #{field.errors.first}" %></span>
                 <% end %>
